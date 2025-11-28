@@ -28,12 +28,14 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen p-8">
+    <main className="min-h-screen p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="max-w-2xl mx-auto mb-12">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold">x402 Cross-Chain Pay</h1>
+      <div className="max-w-2xl mx-auto mb-8 sm:mb-12">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 sm:mb-8">
+          <div className="flex-1">
+            <h1 className="text-2xl sm:text-3xl font-bold">
+              x402 Cross-Chain Pay
+            </h1>
             <p className="text-sm text-zinc-400 mt-1">
               Paga en Base, vendedor recibe en Solana
             </p>
@@ -41,14 +43,14 @@ export default function Home() {
           {authenticated ? (
             <button
               onClick={logout}
-              className="px-4 py-2 bg-zinc-800 rounded-lg hover:bg-zinc-700 transition text-sm"
+              className="px-4 py-2 bg-zinc-800 rounded-lg hover:bg-zinc-700 transition text-sm whitespace-nowrap"
             >
               Desconectar
             </button>
           ) : (
             <button
               onClick={login}
-              className="px-4 py-2 bg-violet-500 rounded-lg hover:bg-violet-600 transition text-sm font-medium"
+              className="px-4 py-2 bg-violet-500 rounded-lg hover:bg-violet-600 transition text-sm font-medium whitespace-nowrap"
             >
               Conectar con Gmail
             </button>
@@ -56,9 +58,9 @@ export default function Home() {
         </div>
 
         {user && (
-          <div className="p-4 bg-zinc-900 rounded-xl mb-8">
+          <div className="p-4 bg-zinc-900 rounded-xl mb-6 sm:mb-8">
             <p className="text-sm text-zinc-400">Conectado como</p>
-            <p className="font-medium">
+            <p className="font-medium break-all sm:break-normal">
               {user.email?.address || user.wallet?.address}
             </p>
           </div>
@@ -66,21 +68,27 @@ export default function Home() {
 
         {/* Wallet Status */}
         {authenticated && (
-          <div className="p-4 bg-zinc-900 rounded-xl mb-8">
+          <div className="p-4 bg-zinc-900 rounded-xl mb-6 sm:mb-8">
             <h3 className="text-sm font-medium text-zinc-400 mb-3">
               Wallets Detectadas
             </h3>
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                 <span className="text-zinc-500">Base (EVM):</span>
-                <span className={evmWallet ? "text-green-400" : "text-red-400"}>
+                <span
+                  className={`${
+                    evmWallet ? "text-green-400" : "text-red-400"
+                  } break-all sm:break-normal`}
+                >
                   {evmWallet ? evmWallet.address : "No encontrada"}
                 </span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                 <span className="text-zinc-500">Solana:</span>
                 <span
-                  className={solanaWallet ? "text-green-400" : "text-red-400"}
+                  className={`${
+                    solanaWallet ? "text-green-400" : "text-red-400"
+                  } break-all sm:break-normal`}
                 >
                   {solanaWallet ? solanaWallet.address : "No encontrada"}
                 </span>
@@ -108,7 +116,7 @@ export default function Home() {
       </div>
 
       {/* Content */}
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-2xl mx-auto px-4 sm:px-0">
         {/* Track on Solana - buyer pays from Base, facilitator bridges */}
         <ContentUnlock
           contentId="premium-track-1"
@@ -125,13 +133,13 @@ export default function Home() {
 
       {/* Success Message */}
       {unlockedContent && (
-        <div className="fixed bottom-8 right-8 p-4 bg-green-500 rounded-xl shadow-lg">
-          <p className="font-medium">{unlockedContent}</p>
+        <div className="fixed bottom-4 right-4 sm:bottom-8 sm:right-8 p-4 bg-green-500 rounded-xl shadow-lg z-50 max-w-[calc(100vw-2rem)] sm:max-w-none">
+          <p className="font-medium text-sm sm:text-base">{unlockedContent}</p>
         </div>
       )}
 
       {/* Info */}
-      <div className="max-w-2xl mx-auto mt-12 p-6 bg-zinc-900/50 rounded-xl">
+      <div className="max-w-2xl mx-auto mt-8 sm:mt-12 p-4 sm:p-6 bg-zinc-900/50 rounded-xl px-4 sm:px-6">
         <h2 className="text-lg font-bold mb-4">¿Cómo funciona?</h2>
         <ul className="space-y-2 text-zinc-400 text-sm">
           <li>
@@ -173,11 +181,15 @@ export default function Home() {
         <div className="mt-4 p-3 bg-zinc-800 rounded-lg">
           <p className="text-xs text-zinc-500">
             <strong className="text-zinc-300">Tu wallet Base:</strong>{" "}
-            {evmWallet?.address || "No conectada"}
+            <span className="break-all">
+              {evmWallet?.address || "No conectada"}
+            </span>
           </p>
           <p className="text-xs text-zinc-500 mt-1">
             <strong className="text-zinc-300">Tu wallet Solana:</strong>{" "}
-            {solanaWallet?.address || "No conectada"}
+            <span className="break-all">
+              {solanaWallet?.address || "No conectada"}
+            </span>
           </p>
         </div>
       </div>

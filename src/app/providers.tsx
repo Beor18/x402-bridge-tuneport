@@ -57,6 +57,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         },
         embeddedWallets: {
           createOnLogin: "all-users",
+          showWalletUIs: false,
         },
         defaultChain: base,
         supportedChains: [base, baseSepolia],

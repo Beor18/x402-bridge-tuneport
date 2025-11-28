@@ -216,7 +216,7 @@ export function ContentUnlock({
   }
 
   return (
-    <div className="bg-zinc-900 rounded-2xl p-6 max-w-md">
+    <div className="bg-zinc-900 rounded-2xl p-4 sm:p-6 w-full">
       {/* Content Preview */}
       <div className="mb-6">
         <h2 className="text-xl font-bold mb-2">{title}</h2>
