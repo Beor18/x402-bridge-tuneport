@@ -1,0 +1,40 @@
+{
+  "name": "x402-multichain-unlock",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "complete-bridge": "tsx scripts/complete-solana-bridge.ts"
+  },
+  "dependencies": {
+    "@circle-fin/adapter-solana": "^1.1.2",
+    "@circle-fin/adapter-viem-v2": "^1.1.1",
+    "@circle-fin/bridge-kit": "^1.1.2",
+    "@coinbase/cdp-sdk": "^1.38.6",
+    "@coinbase/x402": "^0.7.3",
+    "@coral-xyz/anchor": "^0.30.0",
+    "@privy-io/react-auth": "^1.88.0",
+    "@solana/spl-token": "^0.4.0",
+    "@solana/web3.js": "^1.95.0",
+    "bs58": "^6.0.0",
+    "jose": "^6.1.2",
+    "lucide-react": "^0.555.0",
+    "next": "^14.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "viem": "^2.21.0",
+    "x402": "^0.7.3",
+    "x402-fetch": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.6.0"
+  }
+}
