@@ -23,7 +23,7 @@ const CONTENT: Record<string, ContentItem> = {
   "premium-track-1": {
     title: "Track Premium",
     data: "https://example.com/audio/premium-track.mp3",
-    price: "$1.00", // CCTP minimum is ~$1 USDC for cross-chain transfers
+    price: "$0.10", // CCTP minimum is ~$1 USDC for cross-chain transfers
     sellerNetwork: "solana", // Seller wants to receive on Solana
     sellerAddress: "6Kseo7s41VPyaFJUTYeiNDmtZXftKkcmXqHV8qWUajL4", // Solana address
   },

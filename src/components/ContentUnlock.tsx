@@ -312,10 +312,10 @@ export function ContentUnlock({
           {/* Bridge info if seller on Solana */}
           {sellerNetwork === "solana" && (
             <div className="flex items-center gap-2 text-violet-400 text-xs">
-              <span>🔄</span>
+              <span>⚡</span>
               <span>
-                El facilitator ejecutará el bridge completo a Solana (puede
-                tomar 10-20 min)
+                El facilitator ejecutará el bridge completo a Solana usando Fast
+                Transfer (~30-60s)
               </span>
             </div>
           )}

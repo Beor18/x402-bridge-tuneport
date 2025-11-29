@@ -122,7 +122,7 @@ export default function Home() {
           contentId="premium-track-1"
           title="🎵 Track Premium"
           description="Vendedor recibe USDC en Solana. Tú pagas desde Base y el facilitator hace el bridge CCTP automáticamente. Sin fricción, sin esperas."
-          price="$1.00"
+          price="$0.10"
           sellerNetwork="solana"
           onUnlocked={(content) => {
             setUnlockedContent("¡Contenido desbloqueado!");

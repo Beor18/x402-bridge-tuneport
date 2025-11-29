@@ -39,15 +39,15 @@ Usuario quiere desbloquear contenido
 | Frontend | Next.js 14 + Tailwind |
 | Networks | Base Mainnet + Solana Mainnet |
 
-### Bridge Kit SDK (Oficial de Circle)
+### CCTP Bridge Implementation
 
-Este proyecto usa el **Circle Bridge Kit SDK** oficial para bridges CCTP, siguiendo las mejores prácticas de Circle:
+Este proyecto usa **CCTP V2 con Fast Transfer** para bridges rápidos entre Base y Solana:
 
-- ✅ `@circle-fin/bridge-kit` - SDK principal para bridges
-- ✅ `@circle-fin/adapter-viem-v2` - Adapter para EVM chains (Base)
-- ✅ `@circle-fin/adapter-solana` - Adapter para Solana
-- ✅ Soporte para Fast Transfer (< 30 segundos)
-- ✅ Manejo automático de burn, attestation y mint
+- ✅ Implementación directa de CCTP V2 con CDP SDK
+- ✅ **Fast Transfer habilitado por defecto** - Attestation en ~30-60 segundos
+- ✅ API V2 de Circle para attestations rápidas
+- ✅ Manejo completo de burn, attestation y mint automático en Solana
+- ✅ Fallback a modo estándar si Fast Transfer no está disponible
 
 ## Setup
 
@@ -149,7 +149,7 @@ src/
         └── payment.ts                    # x402 payment utilities
 ```
 
-## Flujo del Bridge (Circle Bridge Kit SDK)
+## Flujo del Bridge (CCTP V2 con Fast Transfer)
 
 Cuando un usuario paga en Base pero el vendedor está en Solana, se ejecuta automáticamente:
 
@@ -158,30 +158,31 @@ sequenceDiagram
     participant User as Usuario (Base)
     participant API as API /unlock
     participant x402 as x402 Payment
-    participant BridgeKit as Bridge Kit SDK
-    participant CCTP as Circle CCTP
+    participant CDP as CDP Server Wallet
+    participant CCTP as Circle CCTP V2
     participant Solana as Vendedor (Solana)
     
     User->>API: GET /unlock/content-id
     API-->>User: 402 Payment Required
     User->>x402: Pago con USDC (Base)
     x402->>API: Payment verified ✓
-    API->>BridgeKit: bridge({ from: Base, to: Solana, amount, recipient })
-    BridgeKit->>CCTP: 1. Approve USDC
-    BridgeKit->>CCTP: 2. depositForBurn (burn USDC en Base)
-    CCTP->>CCTP: 3. Circle Attestation (~20s)
-    CCTP->>Solana: 4. Mint USDC en Solana
+    API->>CDP: executeBridgeWithCDP(amount, recipient)
+    CDP->>CCTP: 1. Approve USDC
+    CDP->>CCTP: 2. depositForBurn (burn USDC en Base)
+    CCTP->>CCTP: 3. Fast Transfer Attestation (~30-60s via API V2)
+    CCTP->>Solana: 4. Mint USDC en Solana (automático)
     Solana-->>Vendedor: USDC recibido ✓
     API-->>User: Contenido desbloqueado ✓
 ```
 
-### Ventajas del Bridge Kit SDK
+### Ventajas de Fast Transfer
 
-✅ **Todo automatizado** - Una sola llamada `kit.bridge()`  
-✅ **Fast Transfer** - Attestation en ~20-30 segundos  
-✅ **Manejo de errores** - Reintentos automáticos  
+✅ **⚡ Transferencias rápidas** - Attestation en ~30-60 segundos (vs 10-20 min estándar)  
+✅ **API V2 de Circle** - Endpoints optimizados para Fast Transfer  
+✅ **Polling inteligente** - Verificación cada 1 segundo durante Fast Transfer  
+✅ **Fallback automático** - Si Fast Transfer falla, usa modo estándar  
 ✅ **Type-safe** - TypeScript completo  
-✅ **Multi-chain** - Soporta Base, Ethereum, Arbitrum, Optimism, Polygon, Solana, etc.
+✅ **Sin cambios en la API** - Compatible con código existente
 
 ## CCTP Contratos
 

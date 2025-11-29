@@ -14,16 +14,19 @@ export const CCTP_DOMAINS = {
   POLYGON: 7,
 } as const;
 
-// Base Mainnet
-// Source: https://developers.circle.com/stablecoins/evm-smart-contracts
+// Base Mainnet - CCTP V2 ONLY
+// Source: https://developers.circle.com/cctp/evm-smart-contracts
+// Official V2 contract addresses from Circle documentation
 export const BASE_MAINNET = {
   chainId: 8453,
   rpcUrl:
     "https://api.developer.coinbase.com/rpc/v1/base/aNh4GkSHTvoOtsTHdpCxLJnuzfmqX8dj",
   domain: CCTP_DOMAINS.BASE,
   usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-  tokenMessenger: "0x1682Ae6375C4E4A97e4B583BC394c861A46D8962", // ✅ CORRECTED
-  messageTransmitter: "0xAD09780d193884d503182aD4588450C416D6F9D4", // ✅ CORRECTED
+  // CCTP V2 Contract Addresses (Base Mainnet, Domain 6)
+  // Source: https://developers.circle.com/cctp/evm-smart-contracts#mainnet-contract-addresses
+  tokenMessengerV2: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+  messageTransmitterV2: "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
 } as const;
 
 // Base Sepolia (Testnet)
@@ -56,11 +59,50 @@ export const SOLANA_DEVNET = {
 
 // Circle Attestation API
 export const CIRCLE_ATTESTATION_API = {
-  mainnet: "https://iris-api.circle.com/v1/attestations",
-  testnet: "https://iris-api-sandbox.circle.com/v1/attestations",
+  // V1 (Legacy) - deprecated
+  v1: {
+    mainnet: "https://iris-api.circle.com/v1/attestations",
+    testnet: "https://iris-api-sandbox.circle.com/v1/attestations",
+  },
+  // V2 API endpoints
+  v2: {
+    messages: {
+      mainnet: "https://iris-api.circle.com/v2/messages",
+      testnet: "https://iris-api-sandbox.circle.com/v2/messages",
+    },
+    attestations: {
+      mainnet: "https://iris-api.circle.com/v2/attestations",
+      testnet: "https://iris-api-sandbox.circle.com/v2/attestations",
+    },
+  },
 } as const;
 
-// ABIs
+// CCTP V2 Finality Thresholds
+export const FINALITY_THRESHOLD = {
+  FAST: 1000, // Fast Transfer
+  STANDARD: 2000, // Standard Transfer
+} as const;
+
+// ABIs - CCTP V2
+export const TOKEN_MESSENGER_V2_ABI = [
+  {
+    inputs: [
+      { internalType: "uint256", name: "amount", type: "uint256" },
+      { internalType: "uint32", name: "destinationDomain", type: "uint32" },
+      { internalType: "bytes32", name: "mintRecipient", type: "bytes32" },
+      { internalType: "address", name: "burnToken", type: "address" },
+      { internalType: "bytes32", name: "destinationCaller", type: "bytes32" }, // V2: Address that can call receiveMessage
+      { internalType: "uint256", name: "maxFee", type: "uint256" }, // V2: Maximum fee for Fast Transfer
+      { internalType: "uint32", name: "minFinalityThreshold", type: "uint32" }, // V2: 1000 for Fast, 2000 for Standard
+    ],
+    name: "depositForBurn",
+    outputs: [{ internalType: "uint64", name: "_nonce", type: "uint64" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+] as const;
+
+// Legacy V1 ABI (kept for reference)
 export const TOKEN_MESSENGER_ABI = [
   {
     inputs: [
