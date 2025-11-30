@@ -65,7 +65,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         solanaClusters: [
           {
             name: "mainnet-beta",
-            rpcUrl: "https://api.mainnet-beta.solana.com",
+            rpcUrl:
+              process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
+              "https://mainnet.helius-rpc.com/?api-key=fc2a2d0a-fc68-4801-bd64-3e56031e4838",
           },
           { name: "devnet", rpcUrl: "https://api.devnet.solana.com" },
         ],

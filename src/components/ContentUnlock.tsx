@@ -56,12 +56,12 @@ export function ContentUnlock({
     const requiredAmount = parseFloat(price.replace("$", ""));
 
     if (baseBalance < requiredAmount) {
-      setErrorMessage(`Necesitas al menos ${price} USDC en Base`);
+      setErrorMessage(`Saldo insuficiente. Necesitas al menos ${price} USDC`);
       return;
     }
 
     setStatus("signing");
-    setStatusDetail("Obteniendo requisitos de pago...");
+    setStatusDetail("Preparando pago...");
     setErrorMessage(null);
 
     try {
@@ -184,14 +184,7 @@ export function ContentUnlock({
         console.log("[UI] Success:", result);
         setStatus("success");
 
-        // Show bridge info if applicable
-        if (result.bridge?.success && sellerNetwork === "solana") {
-          setStatusDetail(
-            "✅ Pago confirmado y bridge a Solana completado exitosamente."
-          );
-        } else {
-          setStatusDetail("");
-        }
+        setStatusDetail("");
 
         onUnlocked?.(result);
       } else {
@@ -231,96 +224,29 @@ export function ContentUnlock({
 
       {/* Balance Display */}
       {authenticated && (
-        <div className="mb-6 space-y-2">
+        <div className="mb-6">
           {isLoading ? (
             <div className="text-center py-4 text-zinc-500">
-              Cargando balances...
+              Cargando balance...
             </div>
           ) : balances ? (
-            <>
-              <div className="text-xs text-zinc-600 mb-2">
-                Red: Base Mainnet + Solana Mainnet
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-zinc-500">Base USDC</span>
-                <span
-                  className={
-                    balances.base.hasBalance
-                      ? "text-green-400"
-                      : "text-zinc-500"
-                  }
-                >
-                  ${parseFloat(balances.base.balance).toFixed(4)}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-zinc-500">Solana USDC</span>
-                <span
-                  className={
-                    balances.solana.hasBalance
-                      ? "text-green-400"
-                      : "text-zinc-500"
-                  }
-                >
-                  ${parseFloat(balances.solana.balance).toFixed(4)}
-                </span>
-              </div>
-              <div className="flex justify-between text-sm pt-2 border-t border-zinc-700">
-                <span className="text-zinc-400">Total USDC</span>
-                <span className="font-medium text-white">
-                  ${parseFloat(balances.totalUsdc).toFixed(4)}
-                </span>
-              </div>
-            </>
-          ) : (
-            <div className="text-center py-4 text-zinc-500">
-              No se encontraron wallets
+            <div className="flex justify-between text-sm p-3 bg-zinc-800 rounded-lg">
+              <span className="text-zinc-400">Tu balance</span>
+              <span
+                className={
+                  parseFloat(balances.base.balance) >=
+                  parseFloat(price.replace("$", ""))
+                    ? "text-green-400 font-medium"
+                    : "text-red-400"
+                }
+              >
+                ${parseFloat(balances.totalUsdc).toFixed(2)} USDC
+              </span>
             </div>
-          )}
+          ) : null}
         </div>
       )}
 
-      {/* Payment Info */}
-      {authenticated && (
-        <div className="mb-4 p-3 bg-zinc-800/50 rounded-lg text-sm space-y-2">
-          {/* Seller network info */}
-          <div className="flex items-center gap-2 text-zinc-400">
-            <span>📍</span>
-            <span>
-              Vendedor en:{" "}
-              <span className="text-white font-medium">
-                {sellerNetwork === "solana" ? "Solana" : "Base"}
-              </span>
-            </span>
-          </div>
-
-          {/* Payment strategy */}
-          {balances &&
-          parseFloat(balances.base.balance) >=
-            parseFloat(price.replace("$", "")) ? (
-            <div className="flex items-center gap-2 text-green-400">
-              <span>✓</span>
-              <span>Pagarás desde Base (USDC)</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-red-400">
-              <span>✗</span>
-              <span>Saldo insuficiente en Base</span>
-            </div>
-          )}
-
-          {/* Bridge info if seller on Solana */}
-          {sellerNetwork === "solana" && (
-            <div className="flex items-center gap-2 text-violet-400 text-xs">
-              <span>⚡</span>
-              <span>
-                El facilitator ejecutará el bridge completo a Solana usando Fast
-                Transfer (~30-60s)
-              </span>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Error Message */}
       {errorMessage && (
@@ -363,15 +289,6 @@ export function ContentUnlock({
         {status === "error" && "Reintentar"}
       </button>
 
-      {/* Wallet Info */}
-      {authenticated && (
-        <div className="mt-4 text-xs text-zinc-500 space-y-1">
-          {evmWallet && <div>Base: {evmWallet.address.slice(0, 8)}...</div>}
-          {solanaWallet && (
-            <div>Solana: {solanaWallet.address.slice(0, 8)}...</div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
