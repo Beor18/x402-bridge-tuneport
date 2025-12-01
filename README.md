@@ -30,14 +30,14 @@ Usuario quiere desbloquear contenido
 
 ## Tecnologías
 
-| Componente | Tecnología |
-|------------|------------|
+| Componente     | Tecnología                           |
+| -------------- | ------------------------------------ |
 | Auth & Wallets | Privy (Gmail → wallets EVM + Solana) |
-| Pagos | x402 (HTTP 402 Payment Required) |
-| Bridge | **Circle Bridge Kit SDK** (CCTP V2) |
-| Backend Wallet | Coinbase CDP SDK (Server Wallets) |
-| Frontend | Next.js 14 + Tailwind |
-| Networks | Base Mainnet + Solana Mainnet |
+| Pagos          | x402 (HTTP 402 Payment Required)     |
+| Bridge         | **Circle Bridge Kit SDK** (CCTP V2)  |
+| Backend Wallet | Coinbase CDP SDK (Server Wallets)    |
+| Frontend       | Next.js 14 + Tailwind                |
+| Networks       | Base Mainnet + Solana Mainnet        |
 
 ### CCTP Bridge Implementation
 
@@ -99,11 +99,13 @@ CDP_AGENT_ADDRESS=0x...
 ### Configuración del Facilitator
 
 El **facilitator** es la wallet que:
+
 1. ✅ Recibe pagos x402 en Base
 2. ✅ Ejecuta bridges CCTP cuando el vendedor está en Solana
 3. ✅ Necesita gas (ETH) para ejecutar transacciones
 
 **Fondos necesarios:**
+
 ```bash
 # En Base Mainnet:
 - Mínimo 0.001 ETH (para gas)
@@ -115,6 +117,7 @@ El **facilitator** es la wallet que:
 ```
 
 **Cómo obtener una private key:**
+
 ```bash
 # Opción 1: Crear con cast (Foundry)
 cast wallet new
@@ -160,8 +163,8 @@ sequenceDiagram
     participant x402 as x402 Payment
     participant CDP as CDP Server Wallet
     participant CCTP as Circle CCTP V2
-    participant Solana as Vendedor (Solana)
-    
+    participant Solana as Wallet Dev (Solana)
+
     User->>API: GET /unlock/content-id
     API-->>User: 402 Payment Required
     User->>x402: Pago con USDC (Base)
@@ -172,7 +175,7 @@ sequenceDiagram
     CCTP->>CCTP: 3. Fast Transfer Attestation (~30-60s via API V2)
     CCTP->>Solana: 4. Mint USDC en Solana (automático)
     Solana-->>Vendedor: USDC recibido ✓
-    API-->>User: Contenido desbloqueado ✓
+    Vendedor-->>User: Contenido desbloqueado ✓
 ```
 
 ### Ventajas de Fast Transfer
@@ -187,18 +190,20 @@ sequenceDiagram
 ## CCTP Contratos
 
 ### Base (Domain 6)
-| Contrato | Dirección |
-|----------|-----------|
-| TokenMessenger | `0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d` |
+
+| Contrato           | Dirección                                    |
+| ------------------ | -------------------------------------------- |
+| TokenMessenger     | `0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d` |
 | MessageTransmitter | `0x81D40F21F12A8F0E3252Bccb954D722d4c464B64` |
-| USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| USDC               | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
 
 ### Solana (Domain 5)
-| Programa | Address |
-|----------|---------|
-| MessageTransmitter | `CCTPmbSD7gX1bxKPAmg77w8oFzNFpaQiQUWD43TKaecd` |
+
+| Programa             | Address                                        |
+| -------------------- | ---------------------------------------------- |
+| MessageTransmitter   | `CCTPmbSD7gX1bxKPAmg77w8oFzNFpaQiQUWD43TKaecd` |
 | TokenMessengerMinter | `CCTPiPYPc6AsJuwueEnWgSgucamXDZwBd53dQ11YiKX3` |
-| USDC | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
+| USDC                 | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
 
 ## Uso
 
@@ -213,7 +218,7 @@ import { ContentUnlock } from "@/components/ContentUnlock";
   description="Paga con USDC desde Base o Solana"
   price="$0.10"
   onUnlocked={(content) => console.log(content)}
-/>
+/>;
 ```
 
 ### Hook useMultiChainBalance
@@ -222,15 +227,15 @@ import { ContentUnlock } from "@/components/ContentUnlock";
 import { useMultiChainBalance } from "@/hooks/useMultiChainBalance";
 
 function MyComponent() {
-  const { 
-    balances,           // { base, solana, totalUsdc, preferredNetwork }
+  const {
+    balances, // { base, solana, totalUsdc, preferredNetwork }
     isLoading,
     checkAffordability, // (price) => { canPay, payWith, needsBridge }
     refetch,
   } = useMultiChainBalance();
 
   const affordability = checkAffordability("$1.00");
-  
+
   if (affordability.needsBridge) {
     // Bridge required from affordability.bridgeFrom to affordability.bridgeTo
   }
