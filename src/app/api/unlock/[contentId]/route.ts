@@ -7,6 +7,11 @@ import {
   getFacilitatorAddress,
   getFacilitatorBalance,
 } from "@/lib/cdp/server-wallet";
+import {
+  getSolanaWalletUsdcBalance,
+  waitForUsdcDelivery,
+} from "@/lib/solana/balance-check";
+import { autoClaimAndTransferToSeller } from "@/lib/solana/dev-wallet";
 
 export const runtime = "nodejs";
 
@@ -19,13 +24,16 @@ interface ContentItem {
   sellerAddress: string; // Address to receive payment
 }
 
+// Dev wallet that receives USDC from bridge and auto-transfers to seller
+const SOLANA_DEV_WALLET = "6Kseo7s41VPyaFJUTYeiNDmtZXftKkcmXqHV8qWUajL4";
+
 const CONTENT: Record<string, ContentItem> = {
   "premium-track-1": {
     title: "Track Premium",
     data: "https://example.com/audio/premium-track.mp3",
     price: "$0.10", // CCTP minimum is ~$1 USDC for cross-chain transfers
     sellerNetwork: "solana", // Seller wants to receive on Solana
-    sellerAddress: "6Kseo7s41VPyaFJUTYeiNDmtZXftKkcmXqHV8qWUajL4", // Solana address
+    sellerAddress: "5brQ5ZYq1DKH4VgqFjHZAE7ip6AjUHv9Q8qnQax8mkq3", // Seller's real wallet (replace with actual seller address)
   },
   "album-access": {
     title: "Álbum Completo",
@@ -192,7 +200,7 @@ export async function GET(
       settlement.transaction
     );
 
-    // Step 3: If seller is on Solana, execute bridge CCTP
+    // Step 3: If seller is on Solana, execute bridge CCTP and wait for delivery
     let bridgeResult: {
       success: boolean;
       txHash?: string;
@@ -213,28 +221,129 @@ export async function GET(
       console.log("[x402] Facilitator balance:", balance, "USDC");
       console.log("[x402] Facilitator ETH balance:", ethBalance, "ETH");
 
-      // Execute complete bridge (includes attestation wait)
-      const result = await executeBridgeWithCDP(
-        content.price.replace("$", ""),
+      // Get seller's initial balance BEFORE bridge
+      const expectedAmount = parseFloat(content.price.replace("$", ""));
+      console.log(
+        `[x402] Checking seller's initial balance: ${content.sellerAddress}`
+      );
+      const sellerInitialBalance = await getSolanaWalletUsdcBalance(
         content.sellerAddress
       );
+      console.log(
+        `[x402] Seller initial balance: ${sellerInitialBalance} USDC`
+      );
 
-      if (result.success) {
-        console.log("[x402] ✅ Bridge completed:", result.txHash);
-        bridgeResult = {
-          success: true,
-          txHash: result.txHash,
-        };
-      } else {
+      // Step 1: Execute bridge to DEV WALLET (will auto-claim and transfer)
+      console.log(
+        `[x402] Executing bridge: ${expectedAmount} USDC -> Dev Wallet (${SOLANA_DEV_WALLET})`
+      );
+      const result = await executeBridgeWithCDP(
+        content.price.replace("$", ""),
+        SOLANA_DEV_WALLET // Bridge to dev wallet, not directly to seller
+      );
+
+      if (!result.success || !result.txHash) {
         console.log("[x402] ❌ Bridge failed:", result.error);
         bridgeResult = {
           success: false,
           error: result.error,
         };
+        // Don't unlock content if bridge failed
+        return NextResponse.json(
+          {
+            x402Version: 1,
+            error: `Bridge failed: ${result.error}`,
+            accepts: [paymentRequirementsForVerify],
+          },
+          { status: 402 }
+        );
+      }
+
+      console.log("[x402] ✅ Bridge executed:", result.txHash);
+
+      // Step 2: Auto-claim USDC in dev wallet and transfer to seller
+      console.log(
+        `[x402] Auto-claiming USDC in dev wallet and transferring to seller...`
+      );
+      const claimAndTransferResult = await autoClaimAndTransferToSeller(
+        result.txHash,
+        content.sellerAddress, // Real seller wallet
+        expectedAmount
+      );
+
+      if (!claimAndTransferResult.success) {
+        console.log(
+          `[x402] ⚠️  Claim/Transfer failed: ${claimAndTransferResult.error}`
+        );
+        bridgeResult = {
+          success: false,
+          txHash: result.txHash,
+          error:
+            claimAndTransferResult.error || "Failed to claim and transfer USDC",
+        };
+        // Don't unlock content if claim/transfer failed
+        return NextResponse.json(
+          {
+            x402Version: 1,
+            error:
+              "Bridge completed but automatic claim/transfer failed. Please contact support.",
+            accepts: [paymentRequirementsForVerify],
+          },
+          { status: 402 }
+        );
+      }
+
+      console.log(
+        `[x402] ✅ Claim and transfer completed! Claim TX: ${claimAndTransferResult.claimSignature}, Transfer TX: ${claimAndTransferResult.transferSignature}`
+      );
+
+      // Step 3: Verify seller received USDC
+      console.log(
+        `[x402] Verifying seller received USDC at ${content.sellerAddress}...`
+      );
+      const deliveryResult = await waitForUsdcDelivery(
+        content.sellerAddress,
+        expectedAmount,
+        sellerInitialBalance,
+        {
+          maxWaitTime: 300, // 5 minutes max wait
+          pollInterval: 5000, // Poll every 5 seconds
+        }
+      );
+
+      if (deliveryResult.success) {
+        console.log(
+          `[x402] ✅ Seller received USDC! Balance increased by ${deliveryResult.received.toFixed(
+            6
+          )} USDC`
+        );
+        bridgeResult = {
+          success: true,
+          txHash: result.txHash,
+        };
+      } else {
+        console.log(
+          `[x402] ⚠️  Seller has not received USDC yet: ${deliveryResult.error}`
+        );
+        bridgeResult = {
+          success: false,
+          txHash: result.txHash,
+          error: deliveryResult.error || "USDC not yet received by seller",
+        };
+        // Don't unlock content if seller hasn't received payment
+        return NextResponse.json(
+          {
+            x402Version: 1,
+            error:
+              "Bridge and transfer completed but seller has not received USDC yet. Please wait a moment and try again.",
+            accepts: [paymentRequirementsForVerify],
+          },
+          { status: 402 }
+        );
       }
     }
 
-    // Payment verified! Return the content
+    // Payment verified and seller received USDC! Return the content
     return NextResponse.json({
       success: true,
       content: {
