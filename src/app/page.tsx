@@ -4,7 +4,9 @@ import { useState } from "react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { useSolanaWallets } from "@privy-io/react-auth/solana";
 import { ContentUnlock } from "@/components/ContentUnlock";
+import { SolBridgeContentUnlock } from "@/components/SolBridgeContentUnlock";
 import { PlayerBar } from "@/components/PlayerBar";
+import { SolBridge } from "@/components/SolBridge";
 import { useMultiChainBalance } from "@/hooks/useMultiChainBalance";
 
 export default function Home() {
@@ -47,13 +49,28 @@ export default function Home() {
                 {isLoadingBalance ? (
                   <div className="text-xs text-zinc-500">Cargando...</div>
                 ) : balances ? (
-                  <div className="text-xs sm:text-sm">
-                    <span className="text-zinc-400 hidden md:inline">
-                      Balance:{" "}
-                    </span>
-                    <span className="font-medium text-green-400">
-                      ${parseFloat(balances.totalUsdc).toFixed(2)}
-                    </span>
+                  <div className="flex flex-col items-end gap-1 text-xs sm:text-sm">
+                    {parseFloat(balances.base.ethBalance) > 0 && (
+                      <div>
+                        <span className="text-zinc-400">Base: </span>
+                        <span className="font-medium text-blue-400">
+                          {parseFloat(balances.base.ethBalance).toFixed(4)} ETH
+                        </span>
+                      </div>
+                    )}
+                    {parseFloat(balances.solana.solBalance) > 0 && (
+                      <div>
+                        <span className="text-zinc-400">Solana: </span>
+                        <span className="font-medium text-purple-400">
+                          {parseFloat(balances.solana.solBalance).toFixed(4)}{" "}
+                          SOL
+                        </span>
+                      </div>
+                    )}
+                    {parseFloat(balances.base.ethBalance) === 0 &&
+                      parseFloat(balances.solana.solBalance) === 0 && (
+                        <div className="text-zinc-500">Sin balance</div>
+                      )}
                   </div>
                 ) : null}
               </div>
@@ -107,11 +124,65 @@ export default function Home() {
       </div>
 
       {/* Content */}
-      <div className="max-w-2xl mx-auto">
-        {/* Track on Solana - buyer pays from Base, facilitator bridges */}
-        <ContentUnlock
+      <div className="max-w-2xl mx-auto space-y-6">
+        {/* Bridge SOL Component */}
+        {/* <SolBridge /> */}
+
+        {/* Track con Bridge de SOL - Solana → Base (con dirección destino personalizada) */}
+        <SolBridgeContentUnlock
+          contentId="premium-track-sol-bridge-1"
+          title="Solana → Base"
+          audioUrl="https://example.com/audio/premium-track.mp3"
+          previewUrl="https://example.com/audio/premium-track-preview.mp3"
+          imageUrl="https://turquoise-neighbouring-mule-736.mypinata.cloud/ipfs/QmYvdwzcHcQn5a6CTvd5puLcQmDvFsrc1WyUQBgDoJKaDo/gauchito-gil.webp"
+          description="Beor"
+          price="0.1 SOL"
+          sellerNetwork="base"
+          destinationAddress="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb" // Dirección Base destino del artista/vendedor
+          onUnlocked={(content) => {
+            setUnlockedContent("¡Contenido desbloqueado con bridge de SOL!");
+            console.log("Content:", content);
+          }}
+        />
+
+        {/* Track con Bridge de SOL - Base → Solana (con dirección destino personalizada) */}
+        <SolBridgeContentUnlock
+          contentId="premium-track-sol-bridge-2"
+          title="Base → Solana"
+          audioUrl="https://example.com/audio/track-2.mp3"
+          previewUrl="https://example.com/audio/track-2-preview.mp3"
+          imageUrl="https://turquoise-neighbouring-mule-736.mypinata.cloud/ipfs/QmYvdwzcHcQn5a6CTvd5puLcQmDvFsrc1WyUQBgDoJKaDo/gauchito-gil.webp"
+          description="Artista"
+          price="0.05 SOL"
+          sellerNetwork="solana"
+          destinationAddress="8YevvQPwQRsKwzaqaAujLcTs7cbZts9tBzPsXhRymbw8" // Dirección Solana destino del artista/vendedor
+          onUnlocked={(content) => {
+            setUnlockedContent("¡Bridge completado y contenido desbloqueado!");
+            console.log("Content:", content);
+          }}
+        />
+
+        {/* Track con Bridge de SOL - Sin dirección destino (usa wallet conectada) */}
+        <SolBridgeContentUnlock
+          contentId="premium-track-sol-bridge-3"
+          title="Auto-Destino"
+          audioUrl="https://example.com/audio/track-3.mp3"
+          previewUrl="https://example.com/audio/track-3-preview.mp3"
+          imageUrl="https://turquoise-neighbouring-mule-736.mypinata.cloud/ipfs/QmYvdwzcHcQn5a6CTvd5puLcQmDvFsrc1WyUQBgDoJKaDo/gauchito-gil.webp"
+          description="Artista"
+          price="0.03 SOL"
+          sellerNetwork="base"
+          // destinationAddress se omite, usa evmWallet.address automáticamente
+          onUnlocked={(content) => {
+            setUnlockedContent("¡Bridge a tu propia wallet completado!");
+            console.log("Content:", content);
+          }}
+        />
+
+        {/* Track on Solana - buyer pays from Base, facilitator bridges (USDC) */}
+        {/* <ContentUnlock
           contentId="premium-track-1"
-          title="El Santo de los Humildes"
+          title="El Santo de los Humildes (USDC)"
           audioUrl="https://example.com/audio/premium-track.mp3"
           previewUrl="https://example.com/audio/premium-track-preview.mp3"
           imageUrl="https://turquoise-neighbouring-mule-736.mypinata.cloud/ipfs/QmYvdwzcHcQn5a6CTvd5puLcQmDvFsrc1WyUQBgDoJKaDo/gauchito-gil.webp"
@@ -119,10 +190,10 @@ export default function Home() {
           price="$0.10"
           sellerNetwork="solana"
           onUnlocked={(content) => {
-            setUnlockedContent("¡Contenido desbloqueado!");
+            setUnlockedContent("¡Contenido desbloqueado con USDC!");
             console.log("Content:", content);
           }}
-        />
+        /> */}
       </div>
 
       {/* Success Message */}
@@ -142,8 +213,8 @@ export default function Home() {
             <span className="text-violet-400">1.</span> Conectas con tu cuenta
           </li>
           <li>
-            <span className="text-violet-400">2.</span> Pagas con USDC de forma
-            rápida y segura
+            <span className="text-violet-400">2.</span> Pagas de forma rápida y
+            segura
           </li>
           <li>
             <span className="text-violet-400">3.</span> Accedes al contenido

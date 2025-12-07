@@ -1,220 +1,288 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
-import { useMultiChainBalance } from "@/hooks/useMultiChainBalance";
-import { createWalletClient, custom, type Hex } from "viem";
-import { base } from "viem/chains";
+import { useSolanaWallets } from "@privy-io/react-auth/solana";
+import { PublicKey, Connection } from "@solana/web3.js";
+import { createWalletClient, custom, Address } from "viem";
+import { baseSepolia } from "viem/chains";
+import {
+  bridgeSolToBase,
+  bridgeTokenToSolana,
+  SOLANA_DEVNET_CONFIG,
+  BASE_SEPOLIA_CONFIG,
+  getSolBalanceInBase,
+} from "@/lib/base-solana-bridge";
 import { usePlayer } from "@/contexts/PlayerContext";
+import { Loader2, ArrowRightLeft, CheckCircle2, XCircle } from "lucide-react";
 
-interface ContentUnlockProps {
+interface SolBridgeContentUnlockProps {
   contentId: string;
   title: string;
   description: string;
-  price: string;
+  price: string; // Precio en SOL (ej: "0.1 SOL")
   sellerNetwork?: "base" | "solana";
+  destinationAddress?: string; // Dirección destino opcional (Base o Solana según sellerNetwork)
   imageUrl?: string;
   previewUrl?: string;
   audioUrl?: string;
   onUnlocked?: (content: unknown) => void;
 }
 
-export function ContentUnlock({
+export function SolBridgeContentUnlock({
   contentId,
   title,
   description,
   price,
   sellerNetwork = "solana",
+  destinationAddress,
   imageUrl,
   previewUrl,
   audioUrl,
   onUnlocked,
-}: ContentUnlockProps) {
+}: SolBridgeContentUnlockProps) {
   const { login, authenticated, ready } = usePrivy();
   const { wallets: evmWallets } = useWallets();
-  const { balances, isLoading } = useMultiChainBalance(true);
+  const { wallets: solanaWallets } = useSolanaWallets();
   const { playTrack } = usePlayer();
 
   const [status, setStatus] = useState<
-    "idle" | "signing" | "paying" | "success" | "error"
+    "idle" | "bridging" | "success" | "error"
   >("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusDetail, setStatusDetail] = useState<string>("");
-  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(
-    imageUrl || null
-  );
-  const [currentAudioUrl, setCurrentAudioUrl] = useState<string | null>(
-    audioUrl || null
-  );
+  const [connection, setConnection] = useState<Connection | null>(null);
+  const [solanaBalance, setSolanaBalance] = useState<number>(0);
+  const [baseBalance, setBaseBalance] = useState<number>(0);
 
   const evmWallet = evmWallets[0];
+  const solanaWallet = solanaWallets?.[0];
 
-  async function handleUnlock() {
+  // Obtener dirección Solana
+  const solanaAddress = solanaWallet?.address || null;
+  const solanaPublicKey = solanaAddress ? new PublicKey(solanaAddress) : null;
+
+  // Crear connection (devnet para pruebas) con configuración mejorada
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const connection = new Connection(SOLANA_DEVNET_CONFIG.rpcUrl, {
+        commitment: "confirmed",
+        confirmTransactionInitialTimeout: 60000, // 60 segundos timeout
+      });
+      setConnection(connection);
+    }
+  }, []);
+
+  // Obtener balances
+  useEffect(() => {
+    const fetchBalances = async () => {
+      if (connection && solanaPublicKey) {
+        try {
+          const balance = await connection.getBalance(solanaPublicKey);
+          setSolanaBalance(balance / 1e9);
+        } catch (error) {
+          console.error("Error fetching Solana balance:", error);
+        }
+      }
+      if (evmWallet?.address) {
+        try {
+          const wsolBalance = await getSolBalanceInBase(
+            evmWallet.address as Address,
+            false // devnet
+          );
+          setBaseBalance(Number(wsolBalance) / 1e18);
+        } catch (error) {
+          console.error("Error fetching Base balance:", error);
+        }
+      }
+    };
+
+    if (authenticated) {
+      fetchBalances();
+      const interval = setInterval(fetchBalances, 10000); // Actualizar cada 10 segundos
+      return () => clearInterval(interval);
+    }
+  }, [connection, solanaPublicKey, evmWallet?.address, authenticated]);
+
+  // Extraer cantidad de SOL del precio (ej: "0.1 SOL" -> 0.1)
+  const priceAmount = parseFloat(
+    price.replace(" SOL", "").replace("SOL", "").trim()
+  );
+
+  const handleUnlock = async () => {
     if (!authenticated) {
       login();
       return;
     }
 
-    if (!evmWallet) {
-      setErrorMessage("No hay wallet EVM conectada");
-      return;
-    }
-
-    const baseBalance = parseFloat(balances?.base.usdcBalance || "0");
-    const requiredAmount = parseFloat(price.replace("$", ""));
-
-    if (baseBalance < requiredAmount) {
-      setErrorMessage(`Saldo insuficiente. Necesitas al menos ${price} USDC`);
-      return;
-    }
-
-    setStatus("signing");
-    setStatusDetail("Preparando pago...");
+    setStatus("bridging");
+    setStatusDetail("Iniciando bridge...");
     setErrorMessage(null);
 
     try {
-      const provider = await evmWallet.getEthereumProvider();
-      const initialResponse = await fetch(`/api/unlock/${contentId}`);
-
-      if (initialResponse.status !== 402) {
-        if (initialResponse.ok) {
-          const result = await initialResponse.json();
-          setStatus("success");
-          onUnlocked?.(result);
-          return;
-        }
-        throw new Error("Unexpected response");
-      }
-
-      const requirementsData = await initialResponse.json();
-      const paymentRequirements = requirementsData.accepts?.[0];
-
-      if (!paymentRequirements) {
-        throw new Error("No payment requirements received");
-      }
-
-      const validAfter = 0;
-      const validBefore = Math.floor(Date.now() / 1000) + 3600;
-      const nonce =
-        "0x" +
-        Array.from(crypto.getRandomValues(new Uint8Array(32)))
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join("");
-
-      const typedData = {
-        types: {
-          TransferWithAuthorization: [
-            { name: "from", type: "address" },
-            { name: "to", type: "address" },
-            { name: "value", type: "uint256" },
-            { name: "validAfter", type: "uint256" },
-            { name: "validBefore", type: "uint256" },
-            { name: "nonce", type: "bytes32" },
-          ],
-        },
-        primaryType: "TransferWithAuthorization" as const,
-        domain: {
-          name: paymentRequirements.extra?.name || "USD Coin",
-          version: paymentRequirements.extra?.version || "2",
-          chainId: paymentRequirements.extra?.chainId || 8453,
-          verifyingContract: paymentRequirements.asset as `0x${string}`,
-        },
-        message: {
-          from: evmWallet.address as `0x${string}`,
-          to: paymentRequirements.payTo as `0x${string}`,
-          value: BigInt(paymentRequirements.maxAmountRequired),
-          validAfter: BigInt(validAfter),
-          validBefore: BigInt(validBefore),
-          nonce: nonce as `0x${string}`,
-        },
-      };
-
-      setStatusDetail("Firma la autorización en tu wallet...");
-      const signature = (await provider.request({
-        method: "eth_signTypedData_v4",
-        params: [
-          evmWallet.address,
-          JSON.stringify(typedData, (_, v) =>
-            typeof v === "bigint" ? v.toString() : v
-          ),
-        ],
-      })) as Hex;
-
-      const paymentPayload = {
-        x402Version: 1,
-        scheme: "exact",
-        network: "base",
-        payload: {
-          signature,
-          authorization: {
-            from: evmWallet.address,
-            to: paymentRequirements.payTo,
-            value: paymentRequirements.maxAmountRequired,
-            validAfter: validAfter.toString(),
-            validBefore: validBefore.toString(),
-            nonce,
-          },
-        },
-      };
-
-      const encodedPayload = btoa(JSON.stringify(paymentPayload));
-      setStatus("paying");
-      setStatusDetail("Verificando pago...");
-
-      const response = await fetch(`/api/unlock/${contentId}`, {
-        method: "GET",
-        headers: { "X-PAYMENT": encodedPayload },
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        setStatus("success");
-        setStatusDetail("");
-
-        const audioUrlFromResponse =
-          result.audioUrl || result.content?.audioUrl || audioUrl;
-        const imageUrlFromResponse =
-          result.imageUrl ||
-          result.content?.imageUrl ||
-          result.content?.coverImage ||
-          imageUrl;
-
-        if (audioUrlFromResponse) setCurrentAudioUrl(audioUrlFromResponse);
-        if (imageUrlFromResponse) setCurrentImageUrl(imageUrlFromResponse);
-
-        onUnlocked?.(result);
+      if (sellerNetwork === "solana") {
+        // El vendedor está en Solana, el comprador debe bridgear desde Base
+        await handleBaseToSolanaBridge();
       } else {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || errorData.reason || "Payment failed"
-        );
+        // El vendedor está en Base, el comprador debe bridgear desde Solana
+        await handleSolanaToBaseBridge();
       }
     } catch (error) {
+      console.error("Error en bridge:", error);
       setStatus("error");
       setErrorMessage(
         error instanceof Error ? error.message : "Error desconocido"
       );
       setStatusDetail("");
     }
-  }
+  };
+
+  const handleSolanaToBaseBridge = async () => {
+    if (!solanaPublicKey || !solanaWallet || !connection) {
+      throw new Error("Por favor conecta tu wallet de Solana");
+    }
+
+    // Usar destinationAddress si está proporcionada, sino usar la wallet de Base conectada
+    const baseAddress = destinationAddress || evmWallet?.address;
+    if (!baseAddress) {
+      throw new Error(
+        "Por favor conecta tu wallet de Base o proporciona una dirección destino"
+      );
+    }
+
+    // Validar que sea una dirección Base válida
+    if (!baseAddress.startsWith("0x") || baseAddress.length !== 42) {
+      throw new Error("Dirección Base destino inválida");
+    }
+
+    // Verificar balance
+    const estimatedGasFee = 0.001;
+    const requiredAmount = priceAmount + estimatedGasFee;
+
+    if (solanaBalance < requiredAmount) {
+      throw new Error(
+        `Balance insuficiente. Tienes ${solanaBalance.toFixed(
+          4
+        )} SOL, necesitas al menos ${requiredAmount.toFixed(
+          4
+        )} SOL (${priceAmount} SOL + ~${estimatedGasFee} SOL para gas)`
+      );
+    }
+
+    setStatusDetail("Creando transacción de bridge...");
+
+    // Crear transacción de bridge (devnet)
+    const { transaction } = await bridgeSolToBase({
+      connection,
+      payer: solanaPublicKey,
+      to: baseAddress,
+      amount: priceAmount,
+      useMainnet: false,
+    });
+
+    setStatusDetail("Firmando transacción en Solana...");
+
+    // Enviar transacción
+    const signature = await solanaWallet.sendTransaction(
+      transaction,
+      connection
+    );
+
+    setStatusDetail("Esperando confirmación...");
+
+    // Confirmar transacción
+    await connection.confirmTransaction(signature, "confirmed");
+
+    setStatus("success");
+    setStatusDetail("");
+    onUnlocked?.({ contentId, bridgeTx: signature });
+  };
+
+  const handleBaseToSolanaBridge = async () => {
+    if (!evmWallet) {
+      throw new Error("Por favor conecta tu wallet de Base");
+    }
+
+    // Usar destinationAddress si está proporcionada, sino usar la wallet de Solana conectada
+    const solAddress = destinationAddress || solanaAddress;
+    if (!solAddress) {
+      throw new Error(
+        "Por favor conecta tu wallet de Solana o proporciona una dirección destino"
+      );
+    }
+
+    // Validar que sea una dirección Solana válida
+    try {
+      new PublicKey(solAddress);
+    } catch {
+      throw new Error("Dirección Solana destino inválida");
+    }
+
+    // Verificar que esté en Base Sepolia
+    const currentChainId = evmWallet.chainId;
+    const baseSepoliaChainId = baseSepolia.id;
+    const currentChainIdNum =
+      typeof currentChainId === "string"
+        ? parseInt(currentChainId.replace("eip155:", ""))
+        : currentChainId;
+
+    if (currentChainIdNum !== baseSepoliaChainId) {
+      setStatusDetail("Cambiando a Base Sepolia...");
+      await evmWallet.switchChain(baseSepoliaChainId);
+    }
+
+    // Verificar balance de WSOL
+    if (baseBalance < priceAmount) {
+      throw new Error(
+        `Balance insuficiente de WSOL. Tienes ${baseBalance.toFixed(
+          4
+        )} WSOL, necesitas al menos ${priceAmount.toFixed(4)} WSOL`
+      );
+    }
+
+    setStatusDetail("Creando transacción de bridge...");
+
+    // Crear walletClient
+    const provider = await evmWallet.getEthereumProvider();
+    const walletClient = createWalletClient({
+      chain: baseSepolia,
+      transport: custom(provider),
+      account: evmWallet.address as `0x${string}`,
+    });
+
+    setStatusDetail("Firmando transacción en Base...");
+
+    // Ejecutar bridge
+    const amountLamports = BigInt(Math.floor(priceAmount * 1e9));
+    const txHash = await bridgeTokenToSolana({
+      walletClient,
+      to: solAddress,
+      amount: amountLamports,
+      useMainnet: false,
+    });
+
+    setStatus("success");
+    setStatusDetail("");
+    onUnlocked?.({ contentId, bridgeTx: txHash });
+  };
 
   const handlePreview = () => {
     if (!previewUrl) return;
     playTrack({
       title,
       artist: description || "Artista desconocido",
-      imageUrl: currentImageUrl || undefined,
+      imageUrl: imageUrl || undefined,
       audioUrl: previewUrl,
     });
   };
 
   const handlePlayUnlocked = () => {
-    if (!currentAudioUrl) return;
+    if (!audioUrl) return;
     playTrack({
       title,
       artist: description || "Artista desconocido",
-      imageUrl: currentImageUrl || undefined,
-      audioUrl: currentAudioUrl,
+      imageUrl: imageUrl || undefined,
+      audioUrl: audioUrl,
     });
   };
 
@@ -224,18 +292,19 @@ export function ContentUnlock({
 
   const isUnlocked = status === "success";
   const hasBalance =
-    balances &&
-    parseFloat(balances.base.usdcBalance) >= parseFloat(price.replace("$", ""));
+    sellerNetwork === "solana"
+      ? baseBalance >= priceAmount
+      : solanaBalance >= priceAmount + 0.001;
 
   return (
-    <div className="bg-zinc-900 rounded-xl overflow-hidden w-full">
+    <div className="bg-zinc-900 rounded-xl overflow-hidden w-full border border-zinc-800">
       <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 p-3 sm:p-4">
         {/* Album Cover */}
         <div className="relative flex-shrink-0 self-center sm:self-auto">
           <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg overflow-hidden">
-            {currentImageUrl ? (
+            {imageUrl ? (
               <img
-                src={currentImageUrl}
+                src={imageUrl}
                 alt={title}
                 className="w-full h-full object-cover"
               />
@@ -278,19 +347,7 @@ export function ContentUnlock({
 
           {isUnlocked && (
             <div className="absolute -top-1 -right-1 bg-green-500 rounded-full p-1">
-              <svg
-                className="w-3 h-3 text-white"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={3}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
+              <CheckCircle2 className="w-3 h-3 text-white" />
             </div>
           )}
         </div>
@@ -310,8 +367,24 @@ export function ContentUnlock({
               <span className="text-base sm:text-lg font-bold text-violet-400">
                 {price}
               </span>
+              <p className="text-xs text-yellow-400 mt-0.5">🔧 Testnet</p>
             </div>
           </div>
+
+          {/* Bridge Direction Info */}
+          {/* <div className="mb-2 p-2 bg-zinc-800/50 rounded text-xs">
+            <div className="flex items-center gap-2 text-zinc-400">
+              <ArrowRightLeft className="w-3 h-3" />
+              <span>
+                Bridge desde{" "}
+                {sellerNetwork === "solana" ? "Base → Solana" : "Solana → Base"}
+              </span>
+            </div>
+            <div className="mt-1 flex justify-between text-zinc-500">
+              <span>Solana: {solanaBalance.toFixed(4)} SOL</span>
+              <span>Base: {baseBalance.toFixed(4)} WSOL</span>
+            </div>
+          </div> */}
 
           {/* Error Message */}
           {errorMessage && (
@@ -329,8 +402,7 @@ export function ContentUnlock({
 
           {/* Buttons */}
           <div className="flex flex-col sm:flex-row gap-2 mt-3">
-            {isUnlocked && currentAudioUrl ? (
-              /* Solo botón verde de reproducir cuando está desbloqueado */
+            {isUnlocked && audioUrl ? (
               <button
                 onClick={handlePlayUnlocked}
                 className="flex-1 py-2 px-3 bg-green-500 hover:bg-green-600 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 text-white"
@@ -389,9 +461,13 @@ export function ContentUnlock({
                 <button
                   onClick={handleUnlock}
                   disabled={
-                    status === "signing" ||
-                    status === "paying" ||
-                    isLoading ||
+                    status === "bridging" ||
+                    (authenticated &&
+                      sellerNetwork === "solana" &&
+                      !evmWallet) ||
+                    (authenticated &&
+                      sellerNetwork === "base" &&
+                      !solanaPublicKey) ||
                     (authenticated && !hasBalance)
                   }
                   className={`
@@ -424,85 +500,19 @@ export function ContentUnlock({
                   )}
                   {authenticated && status === "idle" && !isUnlocked && (
                     <>
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-                        />
-                      </svg>
+                      <ArrowRightLeft className="w-4 h-4" />
                       Desbloquear
                     </>
                   )}
-                  {status === "signing" && (
+                  {status === "bridging" && (
                     <>
-                      <svg
-                        className="w-4 h-4 animate-spin"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        ></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
-                      Firmando...
-                    </>
-                  )}
-                  {status === "paying" && (
-                    <>
-                      <svg
-                        className="w-4 h-4 animate-spin"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        ></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
+                      <Loader2 className="w-4 h-4 animate-spin" />
                       Procesando...
                     </>
                   )}
                   {status === "success" && (
                     <>
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 13l4 4L19 7"
-                        />
-                      </svg>
+                      <CheckCircle2 className="w-4 h-4" />
                       Desbloqueado
                     </>
                   )}

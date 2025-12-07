@@ -27,8 +27,18 @@ const ERC20_BALANCE_ABI = [
 ] as const;
 
 export interface WalletBalances {
-  base: { address: string; balance: string; hasBalance: boolean };
-  solana: { address: string; balance: string; hasBalance: boolean };
+  base: {
+    address: string;
+    usdcBalance: string;
+    ethBalance: string;
+    hasBalance: boolean;
+  };
+  solana: {
+    address: string;
+    usdcBalance: string;
+    solBalance: string;
+    hasBalance: boolean;
+  };
   totalUsdc: string;
   preferredNetwork: "base" | "solana" | null;
 }
@@ -100,42 +110,99 @@ export async function getSolanaUsdcBalance(
 }
 
 /**
+ * Get ETH balance on Base
+ */
+export async function getBaseEthBalance(
+  address: string,
+  isMainnet: boolean = true
+): Promise<string> {
+  const chain = isMainnet ? base : baseSepolia;
+  const rpcUrl = isMainnet ? BASE_RPC_URL : undefined;
+
+  const client = createPublicClient({
+    chain,
+    transport: http(rpcUrl),
+  });
+
+  try {
+    const balance = await client.getBalance({
+      address: address as Address,
+    });
+    return formatUnits(balance, 18); // ETH has 18 decimals
+  } catch (error) {
+    console.error("Error fetching Base ETH balance:", error);
+    return "0";
+  }
+}
+
+/**
+ * Get SOL balance on Solana
+ */
+export async function getSolanaSolBalance(
+  address: string,
+  isMainnet: boolean = true
+): Promise<string> {
+  const rpcUrl = isMainnet
+    ? process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
+      "https://mainnet.helius-rpc.com/?api-key=fc2a2d0a-fc68-4801-bd64-3e56031e4838"
+    : "https://api.devnet.solana.com";
+
+  try {
+    const connection = new Connection(rpcUrl, "confirmed");
+    const publicKey = new PublicKey(address);
+    const balance = await connection.getBalance(publicKey);
+    return (balance / 1e9).toString(); // Convert lamports to SOL
+  } catch (error) {
+    console.error("Error fetching Solana SOL balance:", error);
+    return "0";
+  }
+}
+
+/**
  * Get combined balances from both networks
  */
 export async function getMultiChainBalances(
   baseAddress: string | null,
   solanaAddress: string | null,
-  isMainnet: boolean = false
+  isMainnet: boolean = true
 ): Promise<WalletBalances> {
-  const [baseBalance, solanaBalance] = await Promise.all([
+  const [baseUsdc, baseEth, solanaUsdc, solanaSol] = await Promise.all([
     baseAddress
       ? getBaseUsdcBalance(baseAddress, isMainnet)
+      : Promise.resolve("0"),
+    baseAddress
+      ? getBaseEthBalance(baseAddress, isMainnet)
       : Promise.resolve("0"),
     solanaAddress
       ? getSolanaUsdcBalance(solanaAddress, isMainnet)
       : Promise.resolve("0"),
+    solanaAddress
+      ? getSolanaSolBalance(solanaAddress, isMainnet)
+      : Promise.resolve("0"),
   ]);
 
-  const baseNum = parseFloat(baseBalance);
-  const solanaNum = parseFloat(solanaBalance);
-  const total = baseNum + solanaNum;
+  const baseUsdcNum = parseFloat(baseUsdc);
+  const solanaUsdcNum = parseFloat(solanaUsdc);
+  const total = baseUsdcNum + solanaUsdcNum;
 
-  // Determine preferred network (the one with more balance)
+  // Determine preferred network (the one with more USDC balance)
   let preferredNetwork: "base" | "solana" | null = null;
-  if (baseNum > 0 || solanaNum > 0) {
-    preferredNetwork = baseNum >= solanaNum ? "base" : "solana";
+  if (baseUsdcNum > 0 || solanaUsdcNum > 0) {
+    preferredNetwork = baseUsdcNum >= solanaUsdcNum ? "base" : "solana";
   }
 
   return {
     base: {
       address: baseAddress || "",
-      balance: baseBalance,
-      hasBalance: baseNum > 0,
+      usdcBalance: baseUsdc,
+      ethBalance: baseEth,
+      hasBalance: baseUsdcNum > 0 || parseFloat(baseEth) > 0,
     },
     solana: {
       address: solanaAddress || "",
-      balance: solanaBalance,
-      hasBalance: solanaNum > 0,
+      usdcBalance: solanaUsdc,
+      solBalance: solanaSol,
+      hasBalance: solanaUsdcNum > 0 || parseFloat(solanaSol) > 0,
     },
     totalUsdc: total.toFixed(6),
     preferredNetwork,
@@ -156,8 +223,8 @@ export function canAfford(
   bridgeTo?: "base" | "solana";
 } {
   const priceNum = parseFloat(price.replace("$", ""));
-  const baseNum = parseFloat(balances.base.balance);
-  const solanaNum = parseFloat(balances.solana.balance);
+  const baseNum = parseFloat(balances.base.usdcBalance);
+  const solanaNum = parseFloat(balances.solana.usdcBalance);
 
   // Can pay directly from Base
   if (baseNum >= priceNum) {
