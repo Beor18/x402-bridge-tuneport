@@ -162,23 +162,6 @@ export default function Home() {
           }}
         />
 
-        {/* Track con Bridge de SOL - Sin dirección destino (usa wallet conectada) */}
-        <SolBridgeContentUnlock
-          contentId="premium-track-sol-bridge-3"
-          title="Auto-Destino"
-          audioUrl="https://example.com/audio/track-3.mp3"
-          previewUrl="https://example.com/audio/track-3-preview.mp3"
-          imageUrl="https://turquoise-neighbouring-mule-736.mypinata.cloud/ipfs/QmYvdwzcHcQn5a6CTvd5puLcQmDvFsrc1WyUQBgDoJKaDo/gauchito-gil.webp"
-          description="Artista"
-          price="0.03 SOL"
-          sellerNetwork="base"
-          // destinationAddress se omite, usa evmWallet.address automáticamente
-          onUnlocked={(content) => {
-            setUnlockedContent("¡Bridge a tu propia wallet completado!");
-            console.log("Content:", content);
-          }}
-        />
-
         {/* Track on Solana - buyer pays from Base, facilitator bridges (USDC) */}
         {/* <ContentUnlock
           contentId="premium-track-1"
